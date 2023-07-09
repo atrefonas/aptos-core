@@ -3154,6 +3154,7 @@ dependencies = [
  "aptos-storage-service-types",
  "aptos-time-service",
  "aptos-types",
+ "arc-swap",
  "bcs 0.1.4",
  "bytes",
  "claims",
