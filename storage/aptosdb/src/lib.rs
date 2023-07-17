@@ -47,7 +47,7 @@ use crate::{
     db_options::{ledger_db_column_families, state_merkle_db_column_families},
     errors::AptosDbError,
     event_store::EventStore,
-    ledger_db::LedgerDb,
+    ledger_db::{LedgerDb, LedgerDbSchemaBatches},
     ledger_store::LedgerStore,
     metrics::{
         API_LATENCY_SECONDS, COMMITTED_TXNS, LATEST_TXN_VERSION, LEDGER_VERSION, NEXT_BLOCK_EPOCH,
@@ -2136,8 +2136,6 @@ impl DbWriter for AptosDB {
         ledger_infos: &[LedgerInfoWithSignatures],
     ) -> Result<()> {
         gauged_api("finalize_state_snapshot", || {
-            // TODO(grao): Support splitted ledger DBs in this function.
-
             // Ensure the output with proof only contains a single transaction output and info
             let num_transaction_outputs = output_with_proof.transactions_and_outputs.len();
             let num_transaction_infos = output_with_proof.proof.transaction_infos.len();
@@ -2168,7 +2166,7 @@ impl DbWriter for AptosDB {
             )?;
 
             // Create a single change set for all further write operations
-            let mut batch = SchemaBatch::new();
+            let mut batch = LedgerDbSchemaBatches::new();
             let mut sharded_kv_batch = new_sharded_kv_schema_batch();
             let state_kv_metadata_batch = SchemaBatch::new();
             // Save the target transactions, outputs, infos and events
@@ -2207,22 +2205,22 @@ impl DbWriter for AptosDB {
                 self.ledger_db.metadata_db(),
                 self.ledger_store.clone(),
                 ledger_infos,
-                Some(&mut batch),
+                Some(&mut batch.ledger_metadata_db_batches),
             )?;
 
-            batch.put::<DbMetadataSchema>(
+            batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
                 &DbMetadataKey::LedgerCommitProgress,
                 &DbMetadataValue::Version(version),
             )?;
-            batch.put::<DbMetadataSchema>(
+            batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
                 &DbMetadataKey::OverallCommitProgress,
                 &DbMetadataValue::Version(version),
             )?;
 
             // Apply the change set writes to the database (atomically) and update in-memory state
             //
-            // TODO(grao): Support sharding here.
-            self.ledger_db.metadata_db().write_schemas(batch)?;
+            // state kv and SMT should use shared way of committing.
+            self.ledger_db.write_schemas(batch)?;
 
             self.ledger_pruner.save_min_readable_version(version)?;
             self.state_store
