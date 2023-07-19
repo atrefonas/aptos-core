@@ -31,6 +31,12 @@ use once_cell::sync::Lazy;
 use std::{collections::BTreeMap, future::Future, path::PathBuf, time::Instant};
 use url::Url;
 
+<<<<<<< HEAD
+=======
+use crate::counters::{test_error, test_fail, test_success, test_latency};
+use crate::utils::{NetworkName, TestFailure, TestLog, TestName, TestResult};
+
+>>>>>>> b4694b4160 (add histogram)
 // network urls
 static DEVNET_NODE_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://fullnode.devnet.aptoslabs.com").unwrap());
@@ -42,6 +48,7 @@ static TESTNET_FAUCET_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://faucet.testnet.aptoslabs.com").unwrap());
 
 // Processes a test result.
+// TODO: needs redesign
 async fn handle_result<Fut: Future<Output = Result<(), TestFailure>>>(
     test_name: TestName,
     network_type: NetworkName,
@@ -60,6 +67,7 @@ async fn handle_result<Fut: Future<Output = Result<(), TestFailure>>>(
     let output = match result {
         Ok(_) => {
             test_success(&test_name.to_string(), &network_type.to_string()).inc();
+            test_latency(&test_name.to_string(), &network_type.to_string(), "success").observe(time);
 
             TestLog {
                 result: TestResult::Success,
@@ -69,10 +77,12 @@ async fn handle_result<Fut: Future<Output = Result<(), TestFailure>>>(
         Err(failure) => {
             match &failure {
                 TestFailure::Error(_) => {
-                    test_error(&test_name.to_string(), &network_type.to_string()).inc()
+                    test_error(&test_name.to_string(), &network_type.to_string()).inc();
+                    test_latency(&test_name.to_string(), &network_type.to_string(), "error").observe(time);
                 },
                 TestFailure::Fail(_) => {
-                    test_fail(&test_name.to_string(), &network_type.to_string()).inc()
+                    test_fail(&test_name.to_string(), &network_type.to_string()).inc();
+                    test_latency(&test_name.to_string(), &network_type.to_string(), "fail").observe(time);
                 },
             };
 
@@ -82,6 +92,7 @@ async fn handle_result<Fut: Future<Output = Result<(), TestFailure>>>(
             }
         },
     };
+
 
     println!(
         "{} result:{:?} in time:{:?}",
