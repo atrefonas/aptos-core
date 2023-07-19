@@ -44,7 +44,6 @@ static TESTNET_FAUCET_URL: Lazy<Url> =
     Lazy::new(|| Url::parse("https://faucet.testnet.aptoslabs.com").unwrap());
 
 // Processes a test result.
-// TODO: needs redesign
 async fn handle_result<Fut: Future<Output = Result<(), TestFailure>>>(
     test_name: TestName,
     network_type: NetworkName,
