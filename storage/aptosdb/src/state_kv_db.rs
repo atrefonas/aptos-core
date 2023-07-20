@@ -116,11 +116,6 @@ impl StateKvDb {
         self.write_progress(version)
     }
 
-    pub(crate) fn commit_raw_batch(&self, state_kv_batch: SchemaBatch) -> Result<()> {
-        // TODO(grao): Support sharding here.
-        self.state_kv_metadata_db.write_schemas(state_kv_batch)
-    }
-
     pub(crate) fn write_progress(&self, version: Version) -> Result<()> {
         self.state_kv_metadata_db.put::<DbMetadataSchema>(
             &DbMetadataKey::StateKvCommitProgress,

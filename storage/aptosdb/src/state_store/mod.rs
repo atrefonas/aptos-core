@@ -9,7 +9,9 @@ use crate::{
     epoch_by_version::EpochByVersionSchema,
     ledger_db::LedgerDb,
     metrics::{STATE_ITEMS, TOTAL_STATE_BYTES},
+    new_sharded_kv_schema_batch,
     schema::{state_value::StateValueSchema, state_value_index::StateValueIndexSchema},
+    shard_state_value_batch,
     stale_state_value_index::StaleStateValueIndexSchema,
     state_kv_db::StateKvDb,
     state_merkle_db::StateMerkleDb,
@@ -1113,16 +1115,16 @@ impl StateValueWriter<StateKey, StateValue> for StateStore {
             .with_label_values(&["state_value_writer_write_chunk"])
             .start_timer();
         let batch = SchemaBatch::new();
-        node_batch
-            .par_iter()
-            .map(|(k, v)| batch.put::<StateValueSchema>(k, v))
-            .collect::<Result<Vec<_>>>()?;
+        let mut sharded_schema_batch = new_sharded_kv_schema_batch();
+
         batch.put::<DbMetadataSchema>(
             &DbMetadataKey::StateSnapshotRestoreProgress(version),
             &DbMetadataValue::StateSnapshotProgress(progress),
         )?;
-        // TODO(grao): Support sharding here.
-        self.state_kv_db.commit_raw_batch(batch)
+
+        shard_state_value_batch(&mut sharded_schema_batch, node_batch)?;
+        self.state_kv_db
+            .commit(version, batch, sharded_schema_batch)
     }
 
     fn write_usage(&self, version: Version, usage: StateStorageUsage) -> Result<()> {

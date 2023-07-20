@@ -126,7 +126,7 @@ pub(crate) fn save_transactions(
     )>,
     kv_replay: bool,
 ) -> Result<()> {
-    if let Some((batch, state_kv_batches, state_kv_metadata_batch)) = existing_batch {
+    if let Some((ledger_db_batch, state_kv_batches, state_kv_metadata_batch)) = existing_batch {
         save_transactions_impl(
             Arc::clone(&ledger_store),
             transaction_store,
@@ -137,13 +137,13 @@ pub(crate) fn save_transactions(
             txn_infos,
             events,
             write_sets.as_ref(),
-            batch,
+            ledger_db_batch,
             state_kv_batches,
             state_kv_metadata_batch,
             kv_replay,
         )?;
     } else {
-        let mut batch = LedgerDbSchemaBatches::new();
+        let mut ledger_db_batch = LedgerDbSchemaBatches::new();
         let mut sharded_kv_schema_batch = new_sharded_kv_schema_batch();
         let state_kv_metadata_batch = SchemaBatch::new();
         save_transactions_impl(
@@ -156,7 +156,7 @@ pub(crate) fn save_transactions(
             txn_infos,
             events,
             write_sets.as_ref(),
-            &mut batch,
+            &mut ledger_db_batch,
             &mut sharded_kv_schema_batch,
             &state_kv_metadata_batch,
             kv_replay,
@@ -170,7 +170,7 @@ pub(crate) fn save_transactions(
             sharded_kv_schema_batch,
         )?;
 
-        ledger_store.ledger_db.write_schemas(batch)?;
+        ledger_store.ledger_db.write_schemas(ledger_db_batch)?;
     }
 
     Ok(())
@@ -231,33 +231,38 @@ pub(crate) fn save_transactions_impl(
     txn_infos: &[TransactionInfo],
     events: &[Vec<ContractEvent>],
     write_sets: &[WriteSet],
-    batch: &mut LedgerDbSchemaBatches,
+    ledger_db_batch: &mut LedgerDbSchemaBatches,
     state_kv_batches: &mut ShardedStateKvSchemaBatch,
     state_kv_metadata_batch: &SchemaBatch,
     kv_replay: bool,
 ) -> Result<()> {
-    // TODO(grao): Support splited ledger db here.
     for (idx, txn) in txns.iter().enumerate() {
         transaction_store.put_transaction(
             first_version + idx as Version,
             txn,
             /*skip_index=*/ false,
-            &batch.transaction_db_batches,
+            &ledger_db_batch.transaction_db_batches,
         )?;
     }
+
     ledger_store.put_transaction_infos(
         first_version,
         txn_infos,
-        &batch.transaction_info_db_batches,
-        &batch.transaction_info_db_batches,
+        &ledger_db_batch.transaction_info_db_batches,
+        &ledger_db_batch.transaction_accumulator_db_batches,
     )?;
-    event_store.put_events_multiple_versions(first_version, events, &batch.event_db_batches)?;
+
+    event_store.put_events_multiple_versions(
+        first_version,
+        events,
+        &ledger_db_batch.event_db_batches,
+    )?;
     // insert changes in write set schema batch
     for (idx, ws) in write_sets.iter().enumerate() {
         transaction_store.put_write_set(
             first_version + idx as Version,
             ws,
-            &batch.write_set_db_batches,
+            &ledger_db_batch.write_set_db_batches,
         )?;
     }
 
@@ -265,7 +270,7 @@ pub(crate) fn save_transactions_impl(
         state_store.put_write_sets(
             write_sets.to_vec(),
             first_version,
-            &batch.ledger_metadata_db_batches, // used for storing the storage usage
+            &ledger_db_batch.ledger_metadata_db_batches, // used for storing the storage usage
             state_kv_batches,
             state_kv_metadata_batch,
             state_store.state_kv_db.enabled_sharding(),
@@ -273,14 +278,18 @@ pub(crate) fn save_transactions_impl(
     }
 
     let last_version = first_version + txns.len() as u64 - 1;
-    batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
-        &DbMetadataKey::LedgerCommitProgress,
-        &DbMetadataValue::Version(last_version),
-    )?;
-    batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
-        &DbMetadataKey::OverallCommitProgress,
-        &DbMetadataValue::Version(last_version),
-    )?;
+    ledger_db_batch
+        .ledger_metadata_db_batches
+        .put::<DbMetadataSchema>(
+            &DbMetadataKey::LedgerCommitProgress,
+            &DbMetadataValue::Version(last_version),
+        )?;
+    ledger_db_batch
+        .ledger_metadata_db_batches
+        .put::<DbMetadataSchema>(
+            &DbMetadataKey::OverallCommitProgress,
+            &DbMetadataValue::Version(last_version),
+        )?;
 
     Ok(())
 }

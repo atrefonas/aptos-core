@@ -54,7 +54,7 @@ use crate::{
         OTHER_TIMERS_SECONDS, ROCKSDB_PROPERTIES,
     },
     pruner::{LedgerPrunerManager, PrunerManager, StateKvPrunerManager, StateMerklePrunerManager},
-    schema::*,
+    schema::{state_value::StateValueSchema, *},
     stale_node_index::StaleNodeIndexSchema,
     stale_node_index_cross_epoch::StaleNodeIndexCrossEpochSchema,
     state_kv_db::StateKvDb,
@@ -70,7 +70,7 @@ use aptos_config::config::{
 use aptos_config::config::{
     BUFFERED_STATE_TARGET_ITEMS, DEFAULT_MAX_NUM_NODES_PER_LRU_CACHE_SHARD,
 };
-use aptos_crypto::HashValue;
+use aptos_crypto::{hash::CryptoHash, HashValue};
 use aptos_db_indexer::Indexer;
 use aptos_infallible::Mutex;
 use aptos_logger::prelude::*;
@@ -187,6 +187,26 @@ type ShardedStateKvSchemaBatch = [SchemaBatch; NUM_STATE_SHARDS];
 
 pub(crate) fn new_sharded_kv_schema_batch() -> ShardedStateKvSchemaBatch {
     arr![SchemaBatch::new(); 16]
+}
+
+type StateValueBatch = crate::state_restore::StateValueBatch<StateKey, Option<StateValue>>;
+
+pub(crate) fn shard_state_value_batch(
+    batch: &mut ShardedStateKvSchemaBatch,
+    values: &StateValueBatch,
+) -> Result<()> {
+    values.iter().for_each(|((key, version), value)| {
+        let shard_id = CryptoHash::hash(key).nibble(0) as usize;
+        assert!(
+            shard_id < NUM_STATE_SHARDS,
+            "Invalid shard id: {}",
+            shard_id
+        );
+        batch[shard_id]
+            .put::<StateValueSchema>(&(key.clone(), *version), value)
+            .expect("Inserting into schema batch should never fail")
+    });
+    Ok(())
 }
 
 fn error_if_too_many_requested(num_requested: u64, max_allowed: u64) -> Result<()> {
@@ -2166,7 +2186,7 @@ impl DbWriter for AptosDB {
             )?;
 
             // Create a single change set for all further write operations
-            let mut batch = LedgerDbSchemaBatches::new();
+            let mut ledger_db_batch = LedgerDbSchemaBatches::new();
             let mut sharded_kv_batch = new_sharded_kv_schema_batch();
             let state_kv_metadata_batch = SchemaBatch::new();
             // Save the target transactions, outputs, infos and events
@@ -2196,7 +2216,11 @@ impl DbWriter for AptosDB {
                 &transaction_infos,
                 &events,
                 wsets,
-                Option::Some((&mut batch, &mut sharded_kv_batch, &state_kv_metadata_batch)),
+                Option::Some((
+                    &mut ledger_db_batch,
+                    &mut sharded_kv_batch,
+                    &state_kv_metadata_batch,
+                )),
                 false,
             )?;
 
@@ -2205,22 +2229,26 @@ impl DbWriter for AptosDB {
                 self.ledger_db.metadata_db(),
                 self.ledger_store.clone(),
                 ledger_infos,
-                Some(&mut batch.ledger_metadata_db_batches),
+                Some(&mut ledger_db_batch.ledger_metadata_db_batches),
             )?;
 
-            batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
-                &DbMetadataKey::LedgerCommitProgress,
-                &DbMetadataValue::Version(version),
-            )?;
-            batch.ledger_metadata_db_batches.put::<DbMetadataSchema>(
-                &DbMetadataKey::OverallCommitProgress,
-                &DbMetadataValue::Version(version),
-            )?;
+            ledger_db_batch
+                .ledger_metadata_db_batches
+                .put::<DbMetadataSchema>(
+                    &DbMetadataKey::LedgerCommitProgress,
+                    &DbMetadataValue::Version(version),
+                )?;
+            ledger_db_batch
+                .ledger_metadata_db_batches
+                .put::<DbMetadataSchema>(
+                    &DbMetadataKey::OverallCommitProgress,
+                    &DbMetadataValue::Version(version),
+                )?;
 
             // Apply the change set writes to the database (atomically) and update in-memory state
             //
             // state kv and SMT should use shared way of committing.
-            self.ledger_db.write_schemas(batch)?;
+            self.ledger_db.write_schemas(ledger_db_batch)?;
 
             self.ledger_pruner.save_min_readable_version(version)?;
             self.state_store
