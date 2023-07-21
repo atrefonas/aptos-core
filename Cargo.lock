@@ -9318,6 +9318,7 @@ dependencies = [
  "anyhow",
  "aptos-indexer-grpc-server-framework",
  "async-trait",
+ "backoff",
  "base64 0.13.0",
  "chrono",
  "clap 4.3.5",
