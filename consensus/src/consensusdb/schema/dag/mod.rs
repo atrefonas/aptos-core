@@ -9,14 +9,20 @@
 //! |   digest   |   node/certified node    |
 //! ```
 
-use crate::dag::{CertifiedNode, Node, NodeId, Vote};
+use crate::{
+    consensusdb::schema::ensure_slice_len_eq,
+    dag::{CertifiedNode, Node, NodeId, Vote},
+    define_schema,
+};
 use anyhow::Result;
+use aptos_consensus_types::common::Round;
 use aptos_crypto::HashValue;
 use aptos_schemadb::{
-    define_schema,
     schema::{KeyCodec, ValueCodec},
     ColumnFamilyName,
 };
+use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
+use std::mem::size_of;
 
 pub const NODE_CF_NAME: ColumnFamilyName = "node";
 
@@ -86,6 +92,42 @@ impl KeyCodec<CertifiedNodeSchema> for HashValue {
 }
 
 impl ValueCodec<CertifiedNodeSchema> for CertifiedNode {
+    fn encode_value(&self) -> Result<Vec<u8>> {
+        Ok(bcs::to_bytes(&self)?)
+    }
+
+    fn decode_value(data: &[u8]) -> Result<Self> {
+        Ok(bcs::from_bytes(data)?)
+    }
+}
+
+pub const ORDERED_ANCHOR_ID_CF_NAME: ColumnFamilyName = "ordered_anchor_id";
+
+define_schema!(
+    OrderedAnchorIdSchema,
+    (u64, Round),
+    NodeId,
+    ORDERED_ANCHOR_ID_CF_NAME
+);
+
+impl KeyCodec<OrderedAnchorIdSchema> for (u64, Round) {
+    fn encode_key(&self) -> Result<Vec<u8>> {
+        let mut data = Vec::with_capacity(16);
+        data.write_u64::<BigEndian>(self.0)?;
+        data.write_u64::<BigEndian>(self.1)?;
+        Ok(data)
+    }
+
+    fn decode_key(data: &[u8]) -> Result<Self> {
+        ensure_slice_len_eq(data, size_of::<Self>())?;
+
+        let epoch = (&data[..8]).read_u64::<BigEndian>()?;
+        let round = (&data[8..]).read_u64::<BigEndian>()?;
+        Ok((epoch, round))
+    }
+}
+
+impl ValueCodec<OrderedAnchorIdSchema> for NodeId {
     fn encode_value(&self) -> Result<Vec<u8>> {
         Ok(bcs::to_bytes(&self)?)
     }
