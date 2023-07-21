@@ -57,8 +57,8 @@ const RESPONSE_CHANNEL_SEND_TIMEOUT: Duration = Duration::from_secs(120);
 
 const SHORT_CONNECTION_DURATION_IN_SECS: u64 = 10;
 
-// Limit the message size to 20MB. By default the downstream can receive up to 20MB.
-const MESSAGE_SIZE_LIMIT: usize = 1024 * 1024 * 20;
+// Limit the message size to 15MB. By default the downstream can receive up to 15MB.
+const MESSAGE_SIZE_LIMIT: usize = 1024 * 1024 * 15;
 
 pub struct RawDataServerWrapper {
     pub redis_client: Arc<redis::Client>,
