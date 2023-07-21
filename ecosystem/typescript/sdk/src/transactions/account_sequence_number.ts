@@ -146,10 +146,6 @@ export class AccountSequenceNumber {
   async synchronize(): Promise<void> {
     if (this.lastUncommintedNumber === this.currentNumber) return;
 
-    while (this.lock) {
-      await sleep(this.sleepTime);
-    }
-
     this.lock = true;
 
     try {
