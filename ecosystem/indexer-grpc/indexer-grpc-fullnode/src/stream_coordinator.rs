@@ -25,8 +25,8 @@ use tokio::sync::mpsc;
 use tonic::Status;
 
 type EndVersion = u64;
-// Limit the message size to 3MB. By default the downstream can receive up to 4MB.
-const MESSAGE_SIZE_LIMIT: usize = 1024 * 1024 * 3;
+// Limit the message size to 20MB. By default the downstream can receive up to 20MB.
+const MESSAGE_SIZE_LIMIT: usize = 1024 * 1024 * 20;
 
 // Basically a handler for a single GRPC stream request
 pub struct IndexerStreamCoordinator {
