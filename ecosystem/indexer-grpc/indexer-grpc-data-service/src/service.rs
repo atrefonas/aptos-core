@@ -49,7 +49,7 @@ const TRANSIENT_DATA_ERROR_RETRY_SLEEP_DURATION_MS: u64 = 1000;
 
 // Up to MAX_RESPONSE_CHANNEL_SIZE response can be buffered in the channel. If the channel is full,
 // the server will not fetch more data from the cache and file store until the channel is not full.
-const MAX_RESPONSE_CHANNEL_SIZE: usize = 40;
+const MAX_RESPONSE_CHANNEL_SIZE: usize = 80;
 
 // The server will retry to send the response to the client and give up after RESPONSE_CHANNEL_SEND_TIMEOUT.
 // This is to prevent the server from being occupied by a slow client.
@@ -485,7 +485,10 @@ async fn channel_send_multiple_with_timeout(
             RESPONSE_CHANNEL_SEND_TIMEOUT,
         )
         .await?;
-        info!("[data service] response waiting time in seconds: {}", current_instant.elapsed().as_secs_f64());
+        info!(
+            "[data service] response waiting time in seconds: {}",
+            current_instant.elapsed().as_secs_f64()
+        );
     }
     Ok(())
 }
