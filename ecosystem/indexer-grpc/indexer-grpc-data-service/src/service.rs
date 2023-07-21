@@ -479,11 +479,13 @@ async fn channel_send_multiple_with_timeout(
     tx: tokio::sync::mpsc::Sender<Result<TransactionsResponse, Status>>,
 ) -> Result<(), SendTimeoutError<Result<TransactionsResponse, Status>>> {
     for resp_item in resp_items {
+        let current_instant = std::time::Instant::now();
         tx.send_timeout(
             Result::<TransactionsResponse, Status>::Ok(resp_item),
             RESPONSE_CHANNEL_SEND_TIMEOUT,
         )
         .await?;
+        info!("[data service] response waiting time in seconds: {}", current_instant.elapsed().as_secs_f64());
     }
     Ok(())
 }
