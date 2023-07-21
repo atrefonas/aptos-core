@@ -1,7 +1,5 @@
 // Copyright © Aptos Foundation
 
-use std::time::Duration;
-
 use crate::schema::nft_metadata_crawler_uris;
 use backoff::{retry, ExponentialBackoff};
 use diesel::{
@@ -9,6 +7,7 @@ use diesel::{
     r2d2::{ConnectionManager, PooledConnection},
 };
 use serde::{Deserialize, Serialize};
+use std::time::Duration;
 
 const MAX_RETRY_TIME_SECONDS: u64 = 15;
 
