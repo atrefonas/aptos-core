@@ -9,6 +9,7 @@ use crate::metrics::{
 use aptos_indexer_grpc_utils::{
     build_protobuf_encoded_transaction_wrappers,
     cache_operator::{CacheBatchGetStatus, CacheOperator},
+    chunk_transactions,
     config::IndexerGrpcFileStoreConfig,
     constants::{BLOB_STORAGE_SIZE, GRPC_AUTH_TOKEN_HEADER, GRPC_REQUEST_NAME_HEADER},
     file_store_operator::{FileStoreOperator, GcsFileStoreOperator, LocalFileStoreOperator},
@@ -55,6 +56,9 @@ const MAX_RESPONSE_CHANNEL_SIZE: usize = 40;
 const RESPONSE_CHANNEL_SEND_TIMEOUT: Duration = Duration::from_secs(120);
 
 const SHORT_CONNECTION_DURATION_IN_SECS: u64 = 10;
+
+// Limit the message size to 3MB. By default the downstream can receive up to 4MB.
+const MESSAGE_SIZE_LIMIT: usize = 1024 * 1024 * 3;
 
 pub struct RawDataServerWrapper {
     pub redis_client: Arc<redis::Client>,
@@ -249,25 +253,21 @@ impl RawData for RawDataServerWrapper {
                         }
                     };
                     // 2. Push the data to the response channel, i.e. stream the data to the client.
-                    let resp_item =
-                        get_transactions_response_builder(transaction_data, chain_id as u32);
-                    let current_batch_size = resp_item.transactions.as_slice().len();
-                    let end_of_batch_version =
-                        resp_item.transactions.as_slice().last().unwrap().version;
-                    let data_latency_in_secs = resp_item
+                    let current_batch_size = transaction_data.as_slice().len();
+                    let end_of_batch_version = transaction_data.as_slice().last().unwrap().1;
+                    let resp_items =
+                        get_transactions_responses_builder(transaction_data, chain_id as u32);
+                    let data_latency_in_secs = resp_items
+                        .last()
+                        .unwrap()
                         .transactions
-                        .first()
+                        .last()
                         .unwrap()
                         .timestamp
                         .as_ref()
                         .map(time_diff_since_pb_timestamp_in_secs);
-                    match tx
-                        .send_timeout(
-                            Result::<TransactionsResponse, Status>::Ok(resp_item),
-                            RESPONSE_CHANNEL_SEND_TIMEOUT,
-                        )
-                        .await
-                    {
+
+                    match channel_send_multiple_with_timeout(resp_items, tx.clone()).await {
                         Ok(_) => {
                             PROCESSED_BATCH_SIZE
                                 .with_label_values(&[
@@ -343,21 +343,26 @@ impl RawData for RawDataServerWrapper {
 }
 
 /// Builds the response for the get transactions request. Partial batch is ok, i.e., a batch with transactions < 1000.
-fn get_transactions_response_builder(
+fn get_transactions_responses_builder(
     data: Vec<EncodedTransactionWithVersion>,
     chain_id: u32,
-) -> TransactionsResponse {
-    TransactionsResponse {
-        chain_id: Some(chain_id as u64),
-        transactions: data
-            .into_iter()
-            .map(|(encoded, _)| {
-                let decoded_transaction = base64::decode(encoded).unwrap();
-                let transaction = Transaction::decode(&*decoded_transaction);
-                transaction.unwrap()
-            })
-            .collect(),
-    }
+) -> Vec<TransactionsResponse> {
+    let transactions: Vec<Transaction> = data
+        .into_iter()
+        .map(|(encoded, _)| {
+            let decoded_transaction = base64::decode(encoded).unwrap();
+            let transaction = Transaction::decode(&*decoded_transaction);
+            transaction.unwrap()
+        })
+        .collect();
+    let chunks = chunk_transactions(transactions, MESSAGE_SIZE_LIMIT);
+    chunks
+        .into_iter()
+        .map(|chunk| TransactionsResponse {
+            chain_id: Some(chain_id as u64),
+            transactions: chunk,
+        })
+        .collect::<Vec<TransactionsResponse>>()
 }
 
 /// Fetches data from cache or the file store. It returns the data if it is ready in the cache or file store.
@@ -467,4 +472,18 @@ fn get_request_metadata(req: &Request<GetTransactionsRequest>) -> tonic::Result<
         // TODO: after launch, support 'core', 'partner', 'community' and remove 'testing_v1'.
         request_source: "testing_v1".to_string(),
     })
+}
+
+async fn channel_send_multiple_with_timeout(
+    resp_items: Vec<TransactionsResponse>,
+    tx: tokio::sync::mpsc::Sender<Result<TransactionsResponse, Status>>,
+) -> Result<(), SendTimeoutError<Result<TransactionsResponse, Status>>> {
+    for resp_item in resp_items {
+        tx.send_timeout(
+            Result::<TransactionsResponse, Status>::Ok(resp_item),
+            RESPONSE_CHANNEL_SEND_TIMEOUT,
+        )
+        .await?;
+    }
+    Ok(())
 }
