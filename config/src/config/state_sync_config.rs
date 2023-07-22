@@ -191,7 +191,7 @@ impl Default for StorageServiceConfig {
             max_transaction_output_chunk_size: MAX_TRANSACTION_OUTPUT_CHUNK_SIZE,
             min_time_to_ignore_peers_secs: 300, // 5 minutes
             request_moderator_refresh_interval_ms: 1000, // 1 second
-            storage_summary_refresh_interval_ms: 500,
+            storage_summary_refresh_interval_ms: 200, // Optimal for <= 5 blocks per second
         }
     }
 }
@@ -199,6 +199,9 @@ impl Default for StorageServiceConfig {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Eq, Serialize)]
 #[serde(default, deny_unknown_fields)]
 pub struct DataStreamingServiceConfig {
+    /// Whether or not to enable data subscription streaming.
+    pub enable_subscription_streaming: bool,
+
     /// The interval (milliseconds) at which to refresh the global data summary.
     pub global_summary_refresh_interval_ms: u64,
 
@@ -228,6 +231,7 @@ pub struct DataStreamingServiceConfig {
 impl Default for DataStreamingServiceConfig {
     fn default() -> Self {
         Self {
+            enable_subscription_streaming: true,
             global_summary_refresh_interval_ms: 50,
             max_concurrent_requests: MAX_CONCURRENT_REQUESTS,
             max_concurrent_state_requests: MAX_CONCURRENT_STATE_REQUESTS,
