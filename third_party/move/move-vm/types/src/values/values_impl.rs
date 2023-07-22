@@ -2916,8 +2916,8 @@ pub mod debug {
 *
 * Identifiers
 *
-*   Implementation of the Display trait for VM Values. These are supposed to be more
-*   friendly & readable than the generated Debug dump.
+*   Implementation of conversion between 64-bit identifiers and values.
+*   Used for value exchange.
 *
 **************************************************************************************/
 
@@ -2936,7 +2936,7 @@ impl TryAsIdentifier for ValueImpl {
             ValueImpl::U128(x) => {
                 if *x > u64::MAX as u128 {
                     Err(ExchangeError::new(&format!(
-                        "Cannot have {:?} as identifier, the value is too big",
+                        "cannot have {} as identifier, the value is too big",
                         self
                     )))
                 } else {
@@ -2944,7 +2944,7 @@ impl TryAsIdentifier for ValueImpl {
                 }
             },
             _ => Err(ExchangeError::new(&format!(
-                "Interpreting {:?} as identifier is not supported",
+                "interpreting {} as identifier is not supported",
                 self
             ))),
         }
@@ -3164,7 +3164,7 @@ impl<'e, 'l, 'v> serde::Serialize for AnnotatedValue<'e, 'l, 'v, MoveTypeLayout,
                         .serialize(serializer)
                     },
                     None => {
-                        // Ie did not exchange values, simply continue with serialization.
+                        // If did not exchange values, simply continue with serialization.
                         AnnotatedValue {
                             exchange: self.exchange,
                             layout: layout.as_ref(),

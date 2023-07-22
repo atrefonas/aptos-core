@@ -8,6 +8,7 @@ use crate::{
     logging::expect_no_verification_errors,
     native_functions::{NativeFunction, NativeFunctions, UnboxedNativeFunction},
     session::LoadedFunctionInstantiation,
+    type_layout_builder::CustomLayoutBuilder,
 };
 use move_binary_format::{
     access::{ModuleAccess, ScriptAccess},
@@ -25,6 +26,7 @@ use move_binary_format::{
 use move_bytecode_verifier::{self, cyclic_dependencies, dependencies};
 use move_core_types::{
     account_address::AccountAddress,
+    ident_str,
     identifier::{IdentStr, Identifier},
     language_storage::{ModuleId, StructTag, TypeTag},
     value::{MoveFieldLayout, MoveStructLayout, MoveTypeLayout},
@@ -2869,24 +2871,37 @@ impl Loader {
         Ok(struct_layout)
     }
 
-    // TODO: Move to another file and make constants const.
+    // TODO(aggregator):
+    // Currently aggregator checks are hardcoded and leaking to loader.
+    // It seems that this is only because there is no support for native
+    // types.
+    // Let's think how we can do this nicer.
+
+    /// Returns true f a given struct is an Aggregator.
     fn is_aggregator_struct(&self, gidx: CachedStructIndex) -> bool {
         let struct_type = self.module_cache.read().struct_at(gidx);
         struct_type.module.address().eq(&AccountAddress::ONE)
-            && struct_type.module.name().eq("aggregator_v2")
-            && struct_type.name.as_ident_str().eq("Aggregator")
+            && struct_type.module.name().eq(ident_str!("aggregator_v2"))
+            && struct_type.name.as_ident_str().eq(ident_str!("Aggregator"))
     }
 
-    // TODO: Move to another file and make constants const.
+    /// Returns true f a given struct is an AggregatorSnapshot.
     fn is_aggregator_snapshot_struct(&self, gidx: CachedStructIndex) -> bool {
         let struct_type = self.module_cache.read().struct_at(gidx);
         struct_type.module.address().eq(&AccountAddress::ONE)
-            && struct_type.module.name().eq("aggregator_v2")
-            && struct_type.name.as_ident_str().eq("AggregatorSnapshot")
+            && struct_type.module.name().eq(ident_str!("aggregator_v2"))
+            && struct_type
+                .name
+                .as_ident_str()
+                .eq(ident_str!("AggregatorSnapshot"))
     }
 
-    // TODO: Move to another file.
-    fn aggregator_type_layout(&self, count: &mut u64) -> PartialVMResult<MoveStructLayout> {
+    /// Returns a type layout for Aggregator.
+    fn aggregator_type_layout(
+        &self,
+        count: &mut u64,
+        marked: &mut bool,
+    ) -> PartialVMResult<MoveStructLayout> {
         let field_layouts = vec![
             // Aggregator V2 value.
             MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U128)),
@@ -2894,19 +2909,23 @@ impl Loader {
             MoveTypeLayout::U128,
         ];
         *count += field_layouts.len() as u64;
+        *marked = true;
         Ok(MoveStructLayout::new(field_layouts))
     }
 
-    // TODO: Move to another file.
+    /// Returns a type layout for AggregatorSnapshot.
     fn aggregator_snapshot_type_layout(
         &self,
         count: &mut u64,
+        marked: &mut bool,
     ) -> PartialVMResult<MoveStructLayout> {
         let field_layouts = vec![
             // Aggregator snapshot value.
+            // TODO: This can be generic!
             MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U64)),
         ];
         *count += field_layouts.len() as u64;
+        *marked = true;
         Ok(MoveStructLayout::new(field_layouts))
     }
 
@@ -2973,9 +2992,9 @@ impl Loader {
                 *count += 1;
                 MoveTypeLayout::Struct(
                     if self.is_aggregator_struct(*gidx) {
-                        self.aggregator_type_layout(count)?
+                        self.aggregator_type_layout(count, marked)?
                     } else if self.is_aggregator_snapshot_struct(*gidx) {
-                        self.aggregator_snapshot_type_layout(count)?
+                        self.aggregator_snapshot_type_layout(count, marked)?
                     } else {
                         self.struct_gidx_to_type_layout(*gidx, &[], count, marked, depth)?
                     },

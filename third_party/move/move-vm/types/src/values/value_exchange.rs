@@ -51,7 +51,7 @@ impl Identifier {
             MoveTypeLayout::U64 => Ok(Value::u64(self.0)),
             MoveTypeLayout::U128 => Ok(Value::u128(self.0 as u128)),
             _ => Err(ExchangeError::new(&format!(
-                "Converting identifier with {:?} is not supported.",
+                "converting identifier into {} is not supported",
                 layout
             ))),
         }
