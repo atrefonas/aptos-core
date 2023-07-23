@@ -48,7 +48,7 @@ fn is_valid_layout(layout: &MoveTypeLayout) -> bool {
             true
         },
 
-        L::Vector(layout) | L::Marked(layout) => is_valid_layout(layout),
+        L::Vector(layout) | L::Aggregatable(layout) => is_valid_layout(layout),
 
         L::Struct(struct_layout) => {
             if !matches!(struct_layout, MoveStructLayout::Runtime(_))

@@ -49,8 +49,8 @@ fn test() {
 
     let layout = MoveTypeLayout::Struct(Runtime(vec![
         MoveTypeLayout::U64,
-        MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U128)),
-        MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U64)),
+        MoveTypeLayout::Aggregatable(Box::new(MoveTypeLayout::U128)),
+        MoveTypeLayout::Aggregatable(Box::new(MoveTypeLayout::U64)),
     ]));
 
     // Construct a blob, and then deserialize it, at the same time replacing

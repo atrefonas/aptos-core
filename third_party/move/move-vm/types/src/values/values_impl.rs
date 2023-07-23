@@ -3145,8 +3145,8 @@ impl<'e, 'l, 'v> serde::Serialize for AnnotatedValue<'e, 'l, 'v, MoveTypeLayout,
                 .serialize(serializer)
             },
 
-            // Special case: marked values.
-            (MoveTypeLayout::Marked(layout), val) => {
+            // Special case: aggregatable values.
+            (MoveTypeLayout::Aggregatable(layout), val) => {
                 match self.exchange {
                     Some(exchange) => {
                         // If values are supposed to be exchanged, first re-interpret
@@ -3260,8 +3260,8 @@ impl<'d, 'e> serde::de::DeserializeSeed<'d> for SeedWrapper<'e, &MoveTypeLayout>
                 },
             }),
 
-            // Special case: marked values.
-            L::Marked(layout) => {
+            // Special case: aggregatable values.
+            L::Aggregatable(layout) => {
                 // First, deserialize the marked value. This can be
                 // done by inspecting the marked layout.
                 let value = SeedWrapper {
@@ -3757,7 +3757,7 @@ pub mod prop {
                 .prop_map(move |vals| Value::struct_(Struct::pack(vals)))
                 .boxed(),
 
-            L::Marked(layout) => value_strategy_with_layout(layout.as_ref()),
+            L::Aggregatable(layout) => value_strategy_with_layout(layout.as_ref()),
         }
     }
 
@@ -3779,7 +3779,7 @@ pub mod prop {
         leaf.prop_recursive(8, 32, 2, |inner| {
             prop_oneof![
                 1 => inner.clone().prop_map(|layout| L::Vector(Box::new(layout))),
-                1 => inner.clone().prop_map(|layout| L::Marked(Box::new(layout))),
+                1 => inner.clone().prop_map(|layout| L::Aggregatable(Box::new(layout))),
                 1 => vec(inner, 0..1).prop_map(|f_layouts| {
                      L::Struct(MoveStructLayout::new(f_layouts))}),
             ]
@@ -3801,7 +3801,7 @@ impl ValueImpl {
         use MoveTypeLayout as L;
 
         // Make sure to strip all marks from the type layout.
-        if let L::Marked(layout) = layout {
+        if let L::Aggregatable(layout) = layout {
             return self.as_move_value(layout.as_ref());
         }
 

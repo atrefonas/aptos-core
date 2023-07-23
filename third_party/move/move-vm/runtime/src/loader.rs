@@ -8,7 +8,6 @@ use crate::{
     logging::expect_no_verification_errors,
     native_functions::{NativeFunction, NativeFunctions, UnboxedNativeFunction},
     session::LoadedFunctionInstantiation,
-    type_layout_builder::CustomLayoutBuilder,
 };
 use move_binary_format::{
     access::{ModuleAccess, ScriptAccess},
@@ -2845,6 +2844,11 @@ impl Loader {
 
         let count_before = *count;
         let struct_type = self.module_cache.read().struct_at(gidx);
+
+        // Some types can have aggregatable fields.
+        // These are Aggregator and AggregatorSnapshot right now.
+        *marked |= self.is_aggregator_struct(gidx) || self.is_aggregator_snapshot_struct(gidx);
+
         let field_tys = struct_type
             .fields
             .iter()
@@ -2852,7 +2856,17 @@ impl Loader {
             .collect::<PartialVMResult<Vec<_>>>()?;
         let field_layouts = field_tys
             .iter()
-            .map(|ty| self.type_to_type_layout_impl(ty, count, marked, depth + 1))
+            .enumerate()
+            .map(|(idx, ty)| {
+                // TODO(aggregator) Make 0 some const.
+                if *marked && idx == 0 {
+                    Ok(MoveTypeLayout::Aggregatable(Box::new(
+                        self.type_to_type_layout_impl(ty, count, marked, depth + 1)?,
+                    )))
+                } else {
+                    self.type_to_type_layout_impl(ty, count, marked, depth + 1)
+                }
+            })
             .collect::<PartialVMResult<Vec<_>>>()?;
         let field_node_count = *count - count_before;
 
@@ -2894,39 +2908,6 @@ impl Loader {
                 .name
                 .as_ident_str()
                 .eq(ident_str!("AggregatorSnapshot"))
-    }
-
-    /// Returns a type layout for Aggregator.
-    fn aggregator_type_layout(
-        &self,
-        count: &mut u64,
-        marked: &mut bool,
-    ) -> PartialVMResult<MoveStructLayout> {
-        let field_layouts = vec![
-            // Aggregator V2 value.
-            MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U128)),
-            // Aggregator V2 limit.
-            MoveTypeLayout::U128,
-        ];
-        *count += field_layouts.len() as u64;
-        *marked = true;
-        Ok(MoveStructLayout::new(field_layouts))
-    }
-
-    /// Returns a type layout for AggregatorSnapshot.
-    fn aggregator_snapshot_type_layout(
-        &self,
-        count: &mut u64,
-        marked: &mut bool,
-    ) -> PartialVMResult<MoveStructLayout> {
-        let field_layouts = vec![
-            // Aggregator snapshot value.
-            // TODO: This can be generic!
-            MoveTypeLayout::Marked(Box::new(MoveTypeLayout::U64)),
-        ];
-        *count += field_layouts.len() as u64;
-        *marked = true;
-        Ok(MoveStructLayout::new(field_layouts))
     }
 
     fn type_to_type_layout_impl(
@@ -2990,15 +2971,13 @@ impl Loader {
             },
             Type::Struct(gidx) => {
                 *count += 1;
-                MoveTypeLayout::Struct(
-                    if self.is_aggregator_struct(*gidx) {
-                        self.aggregator_type_layout(count, marked)?
-                    } else if self.is_aggregator_snapshot_struct(*gidx) {
-                        self.aggregator_snapshot_type_layout(count, marked)?
-                    } else {
-                        self.struct_gidx_to_type_layout(*gidx, &[], count, marked, depth)?
-                    },
-                )
+                MoveTypeLayout::Struct(self.struct_gidx_to_type_layout(
+                    *gidx,
+                    &[],
+                    count,
+                    marked,
+                    depth,
+                )?)
             },
             Type::StructInstantiation(gidx, ty_args) => {
                 *count += 1;

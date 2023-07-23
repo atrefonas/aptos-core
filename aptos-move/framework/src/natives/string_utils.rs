@@ -282,7 +282,7 @@ fn native_format_impl(
             )?;
             out.push('}');
         },
-        MoveTypeLayout::Marked(ty) => {
+        MoveTypeLayout::Aggregatable(ty) => {
             native_format_impl(context, ty, val, depth, out)?;
         },
     };
