@@ -1,7 +1,7 @@
 // Copyright © Aptos Foundation
 
 pub mod models;
-pub mod parser;
+pub mod parser_entry;
 pub mod schema;
 pub mod utils;
 
