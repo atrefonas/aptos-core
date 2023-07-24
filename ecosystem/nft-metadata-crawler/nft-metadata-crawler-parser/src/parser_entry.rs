@@ -20,7 +20,7 @@ use tracing::{error, info};
  * Stuct that represents a parser for a single entry from queue
  */
 #[allow(dead_code)]
-pub struct Parser {
+pub struct ParserEntry {
     entry: NFTMetadataCrawlerEntry,
     model: NFTMetadataCrawlerURIs,
     bucket: String,
@@ -29,7 +29,7 @@ pub struct Parser {
     cdn_prefix: String,
 }
 
-impl Parser {
+impl ParserEntry {
     pub fn new(
         entry: NFTMetadataCrawlerEntry,
         bucket: String,
