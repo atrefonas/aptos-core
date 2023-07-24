@@ -16,9 +16,7 @@ use nft_metadata_crawler_utils::NFTMetadataCrawlerEntry;
 use serde_json::Value;
 use tracing::{error, info};
 
-/**
- * Stuct that represents a parser for a single entry from queue
- */
+/// Stuct that represents a parser for a single entry from queue
 #[allow(dead_code)]
 pub struct ParserEntry {
     entry: NFTMetadataCrawlerEntry,
@@ -47,9 +45,7 @@ impl ParserEntry {
         }
     }
 
-    /**
-     * Main parsing flow
-     */
+    /// Main parsing flow
     pub async fn parse(&mut self) -> anyhow::Result<()> {
         // Deduplicate token_uri
         // Skip if token_uri already exists and not force
@@ -171,16 +167,12 @@ impl ParserEntry {
         Ok(())
     }
 
-    /**
-     * Calls and handles error for writing JSON to GCS
-     */
+    /// Calls and handles error for writing JSON to GCS
     async fn handle_write_json_to_gcs(&mut self, _json: Option<Value>) -> Option<String> {
         todo!();
     }
 
-    /**
-     * Calls and handles error for writing image to GCS
-     */
+    /// Calls and handles error for writing image to GCS
     async fn handle_write_image_to_gcs(
         &mut self,
         _image: Option<(Vec<u8>, ImageFormat)>,
@@ -188,16 +180,12 @@ impl ParserEntry {
         todo!();
     }
 
-    /**
-     * Calls and handles error for upserting to Postgres
-     */
+    /// Calls and handles error for upserting to Postgres
     async fn commit_to_postgres(&mut self) {
         todo!();
     }
 
-    /**
-     * Logs info with last_transaction_version
-     */
+    /// Logs info with last_transaction_version
     fn log_info(&self, msg: &str) {
         info!(
             last_transaction_version = self.entry.last_transaction_version,
@@ -205,9 +193,7 @@ impl ParserEntry {
         );
     }
 
-    /**
-     * Logs error with last_transaction_version
-     */
+    /// Logs error with last_transaction_version
     fn log_error(&self, msg: &str) {
         error!(
             last_transaction_version = self.entry.last_transaction_version,
