@@ -52,13 +52,9 @@ impl NFTMetadataCrawlerURIsQuery {
     }
 
     pub fn get_by_raw_image_uri(
-        raw_image_uri: Option<String>,
+        raw_image_uri: String,
         conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     ) -> anyhow::Result<Option<Self>> {
-        if raw_image_uri.is_none() {
-            return Ok(None);
-        }
-
         let mut op = || {
             nft_metadata_crawler_uris::table
                 .filter(nft_metadata_crawler_uris::raw_image_uri.eq(raw_image_uri.clone()))
@@ -82,10 +78,6 @@ impl NFTMetadataCrawlerURIsQuery {
         raw_animation_uri: Option<String>,
         conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     ) -> anyhow::Result<Option<Self>> {
-        if raw_animation_uri.is_none() {
-            return Ok(None);
-        }
-
         let mut op = || {
             nft_metadata_crawler_uris::table
                 .filter(nft_metadata_crawler_uris::raw_animation_uri.eq(raw_animation_uri.clone()))
