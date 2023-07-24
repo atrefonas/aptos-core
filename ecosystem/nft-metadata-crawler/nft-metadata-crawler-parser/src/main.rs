@@ -34,9 +34,7 @@ pub struct ParserConfig {
     pub ipfs_prefix: String,
 }
 
-/**
- * Subscribes to PubSub and sends URIs to Channel
- */
+/// Subscribes to PubSub and sends URIs to Channel
 async fn _process_response(
     _sender: Sender<(NFTMetadataCrawlerEntry, String)>,
     mut _grpc_client: SubscriberClient<Channel>,
@@ -45,9 +43,7 @@ async fn _process_response(
     todo!();
 }
 
-/**
- * Spawns a worker to pull from Channel and perform parsing operations
- */
+/// Spawns a worker to pull from Channel and perform parsing operations
 async fn _spawn_parser(
     _id: usize,
     _semaphore: Arc<Semaphore>,
@@ -61,9 +57,7 @@ async fn _spawn_parser(
     todo!();
 }
 
-/**
- * Subscribes to PubSub and sends URIs to Channel
- */
+/// Subscribes to PubSub and sends URIs to Channel
 async fn process_response(
     sender: Sender<(NFTMetadataCrawlerEntry, String)>,
     mut grpc_client: SubscriberClient<Channel>,
@@ -92,9 +86,7 @@ async fn process_response(
     }
 }
 
-/**
- * Spawns a worker to pull from Channel and perform parsing operations
- */
+/// Spawns a worker to pull from Channel and perform parsing operations
 async fn spawn_parser(
     id: usize,
     semaphore: Arc<Semaphore>,
@@ -138,9 +130,6 @@ async fn spawn_parser(
     }
 }
 
-/**
- * Main driver function
- */
 #[async_trait::async_trait]
 impl RunnableConfig for ParserConfig {
     /// Main driver function
