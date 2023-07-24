@@ -63,11 +63,11 @@ impl ParserEntry {
             // Parse token_uri
             self.log_info("Parsing token_uri for IPFS URI");
             self.model.set_token_uri(self.entry.token_uri.clone());
-            let json_uri = URIParser::parse(self.model.get_token_uri());
+            let json_uri = URIParser::parse(self.model.get_token_uri())?;
 
             // Parse JSON for raw_image_uri and raw_animation_uri
             self.log_info("Parsing JSON");
-            let (raw_image_uri, raw_animation_uri, json) = JSONParser::parse(json_uri).await;
+            let (raw_image_uri, raw_animation_uri, json) = JSONParser::parse(json_uri).await?;
             self.model.set_raw_image_uri(raw_image_uri);
             self.model.set_raw_animation_uri(raw_animation_uri);
 
@@ -106,11 +106,11 @@ impl ParserEntry {
                 let img_uri = URIParser::parse(match self.model.get_raw_image_uri() {
                     Some(uri) => uri,
                     None => self.model.get_token_uri(),
-                });
+                })?;
 
                 // Resize and optimize image and animation
                 self.log_info("Optimizing image");
-                let image = ImageOptimizer::optimize(Some(img_uri)).await;
+                let image = ImageOptimizer::optimize(img_uri).await?;
 
                 // Increment retry count if image is None
                 if image.is_none() {
@@ -138,7 +138,7 @@ impl ParserEntry {
         if let Some(raw_animation_uri) = self.model.get_raw_animation_uri() {
             if self.entry.force
                 || NFTMetadataCrawlerURIsQuery::get_by_raw_animation_uri(
-                    raw_animation_uri,
+                    raw_animation_uri.clone(),
                     &mut self.conn,
                 )?
                 .is_none()
@@ -147,11 +147,11 @@ impl ParserEntry {
 
                 // Parse raw_animation_uri, use None if parsing fails
                 self.log_info("Parsing raw_animation_uri for IPFS");
-                let animation_uri = self.model.get_raw_animation_uri().map(URIParser::parse);
+                let animation_uri = URIParser::parse(raw_animation_uri)?;
 
                 // Resize and optimize animation
                 self.log_info("Optimizing animation");
-                let animation = ImageOptimizer::optimize(animation_uri).await;
+                let animation = ImageOptimizer::optimize(animation_uri).await?;
 
                 // Increment retry count if animation is None
                 if animation.is_none() {
