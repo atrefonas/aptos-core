@@ -1,18 +1,17 @@
 // Copyright © Aptos Foundation
 
-use crate::models::nft_metadata_crawler_uris::NFTMetadataCrawlerURIs;
+use crate::{
+    models::nft_metadata_crawler_uris::NFTMetadataCrawlerURIs, utils::pubsub_entry::PubsubEntry,
+};
 use diesel::{
     r2d2::{ConnectionManager, PooledConnection},
     PgConnection,
 };
-use nft_metadata_crawler_utils::NFTMetadataCrawlerEntry;
 
-/**
- * Stuct that represents a parser for a single entry from queue
- */
+/// Stuct that represents a parser for a single entry from queue
 #[allow(dead_code)]
 pub struct Parser {
-    entry: NFTMetadataCrawlerEntry,
+    entry: PubsubEntry,
     model: NFTMetadataCrawlerURIs,
     bucket: String,
     token: String,
@@ -22,7 +21,7 @@ pub struct Parser {
 
 impl Parser {
     pub fn new(
-        entry: NFTMetadataCrawlerEntry,
+        entry: PubsubEntry,
         bucket: String,
         token: String,
         conn: PooledConnection<ConnectionManager<PgConnection>>,
@@ -38,9 +37,7 @@ impl Parser {
         }
     }
 
-    /**
-     * Main parsing flow
-     */
+    /// Main parsing flow
     pub async fn parse(&mut self) -> anyhow::Result<()> {
         todo!();
     }

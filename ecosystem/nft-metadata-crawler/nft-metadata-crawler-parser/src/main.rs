@@ -1,17 +1,19 @@
 // Copyright © Aptos Foundation
 
 use aptos_indexer_grpc_server_framework::{RunnableConfig, ServerArgs};
+use chrono::NaiveDateTime;
 use crossbeam_channel::{bounded, Receiver, Sender};
 use diesel::{
     r2d2::{ConnectionManager, Pool},
     PgConnection,
 };
 use google_cloud_googleapis::pubsub::v1::subscriber_client::SubscriberClient;
-use nft_metadata_crawler_parser::{establish_connection_pool, parser::Parser};
+use nft_metadata_crawler_parser::{
+    establish_connection_pool, parser::Parser, utils::pubsub_entry::PubsubEntry,
+};
 use nft_metadata_crawler_utils::{
     get_token_source,
     pubsub::{consume_uris, send_acks},
-    NFTMetadataCrawlerEntry,
 };
 use serde::{Deserialize, Serialize};
 use std::{env, sync::Arc};
@@ -32,34 +34,16 @@ pub struct ParserConfig {
     pub database_url: String,
     pub cdn_prefix: String,
     pub ipfs_prefix: String,
+    pub msgs_per_pull: i32,
+    pub num_parsers: usize,
 }
 
 /// Subscribes to PubSub and sends URIs to Channel
-async fn _process_response(
-    _sender: Sender<(NFTMetadataCrawlerEntry, String)>,
-    mut _grpc_client: SubscriberClient<Channel>,
-    _subscription_name: String,
-) -> anyhow::Result<()> {
-    todo!();
-}
-
-/// Spawns a worker to pull from Channel and perform parsing operations
-async fn _spawn_parser(
-    _id: usize,
-    _semaphore: Arc<Semaphore>,
-    _receiver: Arc<Mutex<Receiver<(NFTMetadataCrawlerEntry, String)>>>,
-    _conn: Pool<ConnectionManager<PgConnection>>,
-    _bucket: String,
-    mut _grpc_client: SubscriberClient<Channel>,
-    _subscription_name: String,
-    _cdn_prefix: String,
-) -> anyhow::Result<()> {
-    todo!();
-}
-
-/// Subscribes to PubSub and sends URIs to Channel
-async fn process_response(
-    sender: Sender<(NFTMetadataCrawlerEntry, String)>,
+/// - Creates an infinite loop that pulls `msgs_per_pull` entries from PubSub
+/// - Parses each entry into a `PubsubEntry` and sends to Channel
+async fn consume_pubsub_entries_to_channel_loop(
+    msgs_per_pull: i32,
+    sender: Sender<(PubsubEntry, String)>,
     mut grpc_client: SubscriberClient<Channel>,
     subscription_name: String,
 ) -> anyhow::Result<()> {
@@ -67,7 +51,7 @@ async fn process_response(
     loop {
         // Pulls an entry from PubSub
         let entries = consume_uris(
-            10,
+            msgs_per_pull,
             &mut grpc_client,
             subscription_name.clone(),
             ts.token().await?.access_token,
@@ -77,9 +61,23 @@ async fn process_response(
         // Parses entry and sends to Channel
         for msg in entries.into_inner().received_messages {
             if let Some(entry_option) = msg.message {
-                let entry = entry_option.data;
                 let ack = msg.ack_id;
-                let entry = NFTMetadataCrawlerEntry::new(String::from_utf8(entry)?)?;
+                let entry_string = String::from_utf8(entry_option.data)?;
+                let parts: Vec<&str> = entry_string.split(',').collect();
+                let entry = PubsubEntry {
+                    token_data_id: parts[0].to_string(),
+                    token_uri: parts[1].to_string(),
+                    last_transaction_version: parts[2].to_string().parse()?,
+                    last_transaction_timestamp: NaiveDateTime::parse_from_str(
+                        parts[3],
+                        "%Y-%m-%d %H:%M:%S %Z",
+                    )
+                    .unwrap_or(NaiveDateTime::parse_from_str(
+                        parts[3],
+                        "%Y-%m-%d %H:%M:%S%.f %Z",
+                    )?),
+                    force: parts[4].parse::<bool>().unwrap_or(false),
+                };
                 sender.send((entry.clone(), ack))?;
             }
         }
@@ -90,7 +88,7 @@ async fn process_response(
 async fn spawn_parser(
     id: usize,
     semaphore: Arc<Semaphore>,
-    receiver: Arc<Mutex<Receiver<(NFTMetadataCrawlerEntry, String)>>>,
+    receiver: Arc<Mutex<Receiver<(PubsubEntry, String)>>>,
     conn: Pool<ConnectionManager<PgConnection>>,
     bucket: String,
     mut grpc_client: SubscriberClient<Channel>,
@@ -132,7 +130,7 @@ async fn spawn_parser(
 
 #[async_trait::async_trait]
 impl RunnableConfig for ParserConfig {
-    /// Main driver function
+    /// Main driver function that establishes a connection to Pubsub and parses the Pubsub entries in parallel
     async fn run(&self) -> anyhow::Result<()> {
         let pool = establish_connection_pool(self.database_url.clone());
 
@@ -150,13 +148,13 @@ impl RunnableConfig for ParserConfig {
         let grpc_client = SubscriberClient::new(channel);
 
         // Create workers
-        let num_workers = 10;
-        let (sender, receiver) = bounded::<(NFTMetadataCrawlerEntry, String)>(20);
+        let (sender, receiver) = bounded::<(PubsubEntry, String)>(20);
         let receiver = Arc::new(Mutex::new(receiver));
-        let semaphore = Arc::new(Semaphore::new(num_workers));
+        let semaphore = Arc::new(Semaphore::new(self.num_parsers));
 
         // Spawn producer
-        let producer = tokio::spawn(process_response(
+        let producer = tokio::spawn(consume_pubsub_entries_to_channel_loop(
+            self.msgs_per_pull,
             sender,
             grpc_client.clone(),
             self.subscription_name.clone(),
@@ -164,7 +162,7 @@ impl RunnableConfig for ParserConfig {
 
         // Spawns workers
         let mut workers: Vec<JoinHandle<anyhow::Result<()>>> = Vec::new();
-        for id in 0..num_workers {
+        for id in 0..self.num_parsers {
             let worker = tokio::spawn(spawn_parser(
                 id,
                 Arc::clone(&semaphore),
