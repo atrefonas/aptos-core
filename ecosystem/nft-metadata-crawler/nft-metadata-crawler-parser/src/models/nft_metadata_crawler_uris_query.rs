@@ -74,7 +74,7 @@ impl NFTMetadataCrawlerURIsQuery {
     }
 
     pub fn get_by_raw_animation_uri(
-        raw_animation_uri: Option<String>,
+        raw_animation_uri: String,
         conn: &mut PooledConnection<ConnectionManager<PgConnection>>,
     ) -> anyhow::Result<Option<Self>> {
         let mut op = || {
