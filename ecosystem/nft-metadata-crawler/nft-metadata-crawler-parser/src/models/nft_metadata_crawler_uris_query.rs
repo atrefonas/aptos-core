@@ -6,10 +6,9 @@ use diesel::{
     prelude::*,
     r2d2::{ConnectionManager, PooledConnection},
 };
+use nft_metadata_crawler_utils::constants::MAX_RETRY_TIME_SECONDS;
 use serde::{Deserialize, Serialize};
 use std::time::Duration;
-
-const MAX_RETRY_TIME_SECONDS: u64 = 15;
 
 #[derive(Debug, Deserialize, Identifiable, Queryable, Serialize)]
 #[diesel(primary_key(token_uri))]

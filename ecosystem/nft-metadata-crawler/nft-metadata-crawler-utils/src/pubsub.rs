@@ -1,5 +1,6 @@
 // Copyright © Aptos Foundation
 
+use anyhow::Context;
 use google_cloud_googleapis::pubsub::v1::{
     publisher_client::PublisherClient, subscriber_client::SubscriberClient, AcknowledgeRequest,
     PublishRequest, PublishResponse, PubsubMessage, PullRequest, PullResponse,
@@ -32,7 +33,7 @@ pub async fn publish_uris(
     grpc_client
         .publish(request)
         .await
-        .map_err(|e| anyhow::anyhow!(e))
+        .context("Failed to publish URIs")
 }
 
 /// Consumes a maximum of `count` entries from PubSub subscription `subscription_name`
@@ -56,7 +57,7 @@ pub async fn consume_uris(
     grpc_client
         .pull(request)
         .await
-        .map_err(|e| anyhow::anyhow!(e))
+        .context("Failed to pull URIs")
 }
 
 /// Sends ACK messages to PubSub `subscription_name` for all IDs in `ack_ids`
@@ -79,5 +80,5 @@ pub async fn send_acks(
     grpc_client
         .acknowledge(request)
         .await
-        .map_err(|e| anyhow::anyhow!(e))
+        .context("Failed to send ACKs")
 }
