@@ -1164,6 +1164,7 @@ impl CliTestFramework {
             proposal_id,
             yes,
             no,
+            voting_power: None,
             pool_addresses,
             txn_options: self.transaction_options(index, None),
         }
