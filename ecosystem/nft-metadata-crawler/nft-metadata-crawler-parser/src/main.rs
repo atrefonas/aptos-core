@@ -16,10 +16,11 @@ use nft_metadata_crawler_utils::{
     pubsub::{consume_uris, send_acks},
 };
 use serde::{Deserialize, Serialize};
-use std::{env, sync::Arc};
+use std::{env, sync::Arc, time::Duration};
 use tokio::{
     sync::{Mutex, Semaphore},
     task::JoinHandle,
+    time::sleep,
 };
 use tonic::transport::{Channel, ClientTlsConfig};
 use tracing::{error, info};
@@ -124,7 +125,7 @@ async fn spawn_parser(
         )
         .await?;
 
-        tokio::time::sleep(tokio::time::Duration::from_millis(500)).await;
+        sleep(Duration::from_millis(500)).await;
     }
 }
 

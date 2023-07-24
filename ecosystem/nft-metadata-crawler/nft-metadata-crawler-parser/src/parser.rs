@@ -9,7 +9,7 @@ use diesel::{
 };
 
 /// Stuct that represents a parser for a single entry from queue
-#[allow(dead_code)]
+#[allow(dead_code)] // Will remove when functions are implemented
 pub struct Parser {
     entry: PubsubEntry,
     model: NFTMetadataCrawlerURIs,
