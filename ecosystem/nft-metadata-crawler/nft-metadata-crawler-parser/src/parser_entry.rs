@@ -6,8 +6,8 @@ use crate::{
         nft_metadata_crawler_uris_query::NFTMetadataCrawlerURIsQuery,
     },
     utils::{
-        image_optimizer::ImageOptimizer, json_parser::JSONParser, pubsub_entry::PubsubEntry,
-        uri_parser::URIParser,
+        db::upsert_uris, image_optimizer::ImageOptimizer, json_parser::JSONParser,
+        pubsub_entry::PubsubEntry, uri_parser::URIParser,
     },
 };
 use diesel::{
@@ -100,7 +100,13 @@ impl ParserEntry {
                     last_transaction_version = self.entry.last_transaction_version,
                     "Committing JSON parse to Postgres"
                 );
-                self.commit_to_postgres().await;
+                match upsert_uris(&mut self.conn, self.model.clone()) {
+                    Ok(_) => (),
+                    Err(e) => error!(
+                        last_transaction_version = self.entry.last_transaction_version,
+                        "Error committing JSON parse to Postgres: {}", e
+                    ),
+                }
             } else {
                 // Increment retry count if JSON parsing fails
                 error!(
@@ -178,7 +184,13 @@ impl ParserEntry {
                 last_transaction_version = self.entry.last_transaction_version,
                 "Committing image optimization to Postgres"
             );
-            self.commit_to_postgres().await;
+            match upsert_uris(&mut self.conn, self.model.clone()) {
+                Ok(_) => (),
+                Err(e) => error!(
+                    last_transaction_version = self.entry.last_transaction_version,
+                    "Error committing JSON parse to Postgres: {}", e
+                ),
+            }
         } else {
             info!(
                 last_transaction_version = self.entry.last_transaction_version,
@@ -246,7 +258,13 @@ impl ParserEntry {
                     last_transaction_version = self.entry.last_transaction_version,
                     "Committing animation optimization to Postgres"
                 );
-                self.commit_to_postgres().await;
+                match upsert_uris(&mut self.conn, self.model.clone()) {
+                    Ok(_) => (),
+                    Err(e) => error!(
+                        last_transaction_version = self.entry.last_transaction_version,
+                        "Error committing JSON parse to Postgres: {}", e
+                    ),
+                }
             } else {
                 info!(
                     last_transaction_version = self.entry.last_transaction_version,
@@ -261,10 +279,5 @@ impl ParserEntry {
         }
 
         Ok(())
-    }
-
-    /// Calls and handles error for upserting to Postgres
-    async fn commit_to_postgres(&mut self) {
-        todo!();
     }
 }
