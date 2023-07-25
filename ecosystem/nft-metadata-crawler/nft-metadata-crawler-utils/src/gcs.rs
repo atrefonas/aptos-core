@@ -14,12 +14,7 @@ pub async fn write_json_to_gcs(
     id: String,
     json: Value,
 ) -> anyhow::Result<String> {
-    let client = Client::new();
-    let filename = format!("json_{}.json", id);
-    let url = format!(
-        "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
-        bucket, filename
-    );
+    let (client, filename, url) = init_client_and_format_url(id, bucket);
     let json_string = json.to_string();
 
     let res = client
@@ -47,7 +42,7 @@ pub async fn write_image_to_gcs(
     id: String,
     buffer: Vec<u8>,
 ) -> anyhow::Result<String> {
-    let client = Client::new();
+    let (client, filename, url) = init_client_and_format_url(id, bucket);
     let mut headers = HeaderMap::new();
 
     let extension = match img_format {
@@ -58,12 +53,6 @@ pub async fn write_image_to_gcs(
             .to_string(),
         _ => "jpeg".to_string(),
     };
-
-    let filename = format!("image_{}.{}", id, extension);
-    let url = format!(
-        "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
-        bucket, filename
-    );
 
     headers.insert(
         header::CONTENT_TYPE,
@@ -89,4 +78,15 @@ pub async fn write_image_to_gcs(
             Err(anyhow::anyhow!("Error saving image to GCS {}", text))
         },
     }
+}
+
+/// Creates the request client and formats the filename and URL
+fn init_client_and_format_url(id: String, bucket: String) -> (Client, String, String) {
+    let client = Client::new();
+    let filename = format!("json_{}.json", id);
+    let url = format!(
+        "https://storage.googleapis.com/upload/storage/v1/b/{}/o?uploadType=media&name={}",
+        bucket, filename
+    );
+    (client, filename, url)
 }
